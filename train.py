@@ -193,7 +193,7 @@ def model2train():
                 loss_avg = sum(loss_list) / len(loss_list)
                 train_accuracy = total_correct / total_tokens if total_tokens > 0 else 0
 
-                print("第 %d 步( %02.2f%% ) | 第 %d 轮 | 损失值: %.5f | 准确率: %.2f | 速度: %.2f 步/秒 | 预计耗时: %s"
+                print("第 %d 步( %02.2f%% ) | 第 %d 轮 | 损失值: %.5f | 准确率: %.2f%% | 速度: %.2f 步/秒 | 预计耗时: %s"
                       % (
                           global_step,
                           global_step / max_train_steps * 100,
