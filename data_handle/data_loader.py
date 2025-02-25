@@ -16,8 +16,8 @@ def get_data():
 
     new_func = partial(convert_example,
                        tokenizer=tokenizer,
-                       max_source_seq_len=100,
-                       max_target_seq_len=100)
+                       max_source_seq_len=pc.max_source_seq_len,
+                       max_target_seq_len=pc.max_target_seq_len)
 
     dataset = dataset.map(new_func, batched=True)
     train_dataset = dataset["train"]

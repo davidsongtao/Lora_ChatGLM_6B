@@ -14,16 +14,18 @@ class ProjectConfig(object):
 
         # 调参啦
         self.lora_rank = 16
-        self.lora_alpha = 16
-        self.batch_size = 1
-        self.epochs = 30
-        self.learning_rate = 0.01
-        self.weight_decay = 0.01
-        self.warmup_ratio = 0.06
+        self.lora_alpha = 32
+        self.batch_size = 3
+        self.epochs = 100
+        self.learning_rate = 5e-6
+        self.weight_decay = 0.0005
+        self.warmup_ratio = 0.1
+        self.grad_accumulation_steps = 4  # 梯度累积
+        self.max_grad_norm = 0.5  # 梯度裁剪
 
-        self.max_source_seq_len = 400
-        self.max_target_seq_len = 300
-        self.logging_steps = 100
+        self.max_source_seq_len = 300
+        self.max_target_seq_len = 200
+        self.logging_steps = 10
         self.save_freq = 1
         self.pre_seq_len = 128
         self.prefix_projection = False  # 默认为False,即p-tuning,如果为True，即p-tuning-v2

@@ -5,6 +5,7 @@ import copy
 import argparse
 from functools import partial
 import peft
+import torch.nn.utils
 # autocast是PyTorch中一种混合精度的技术，可在保持数值精度的情况下提高训练速度和减少显存占用。
 # 该方法混合精度训练，如果在CPU环境中不起任何作用
 from torch.cuda.amp import autocast as autocast
@@ -55,10 +56,14 @@ def evaluate_model(model, dev_dataloader):
             logits = outputs.logits
             predictions = torch.argmax(logits, dim=-1)
             mask = labels != -100
-            correct = (predictions == labels) & mask
+
+            # 准确率计算也使用shift版本保持一致
+            shift_predictions = torch.argmax(shift_logits, dim=-1).view(-1)
+            shift_mask = shift_labels.view(-1) != -100
+            correct = (shift_predictions == shift_labels.view(-1)) & shift_mask
 
             total_correct += correct.sum().item()
-            total_tokens += mask.sum().item()
+            total_tokens += shift_mask.sum().item()
 
     # 计算平均损失、困惑度和准确率
     avg_loss = sum(loss_list) / len(loss_list)
@@ -86,7 +91,7 @@ def model2train():
                                       revision="main")
 
     # model.half()将模型数据类型从默认的float32精度转换为更低的float16精度，减少内存
-    model = model.float()
+    # model = model.float()
     # print(f"模型 --> {model}")
 
     # 梯度检查点是一种优化技术，用于在反向传播过程中降低内存使用
@@ -159,10 +164,10 @@ def model2train():
     for epoch in range(1, pc.epochs + 1):
         print("开始训练...")
         # 为每个logging间隔重置统计数据
-        loss_list = []
         total_correct = 0
         total_tokens = 0
-        for batch in train_dataloader:
+        loss_list = []
+        for i, batch in enumerate(train_dataloader):
             input_ids = batch['input_ids'].to(dtype=torch.long, device=pc.device)
             labels = batch['labels'].to(dtype=torch.long, device=pc.device)
 
@@ -175,19 +180,26 @@ def model2train():
             loss = outputs.loss
 
             # 计算训练时的准确率
-            logits = outputs.logits
-            predictions = torch.argmax(logits, dim=-1)
-            mask = labels != -100
-            correct = (predictions == labels) & mask
+            shift_logits = outputs.logits[..., :-1, :].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
+            shift_predictions = torch.argmax(shift_logits, dim=-1).view(-1)
+            shift_mask = shift_labels.view(-1) != -100
+            correct = (shift_predictions == shift_labels.view(-1)) & shift_mask
 
             total_correct += correct.sum().item()
-            total_tokens += mask.sum().item()
+            total_tokens += shift_mask.sum().item()
 
-            # 优化器清零，反向传播，梯度更新，更新学习率调度器
-            optimizer.zero_grad()
+            if pc.grad_accumulation_steps > 1:
+                loss = loss / pc.grad_accumulation_steps
+
             loss.backward()
-            optimizer.step()
-            lr_scheduler.step()
+
+            torch.nn.utils.clip_grad_norm_(model.parameters(), pc.max_grad_norm)
+
+            if (i + 1) % pc.grad_accumulation_steps == 0:
+                optimizer.step()
+                lr_scheduler.step()
+                optimizer.zero_grad()
 
             loss_list.append(float(loss.cpu().detach()))
 
@@ -212,8 +224,9 @@ def model2train():
         # 评估模型
         average_loss, eval_accuracy, perplexity = evaluate_model(model, dev_dataloader)
 
-        print(f"第{epoch}论训练结束。平均损失值: {average_loss:.5f} | 准确率: {(eval_accuracy * 100):.2f}% | 困惑度： {perplexity:.2f} ")
-        if average_loss < best_eval_loss:
+        print(f"第{epoch}轮次训练结束。平均损失值: {average_loss:.5f} | 准确率: {(eval_accuracy * 100):.2f}% | 困惑度： {perplexity:.2f} ")
+
+        if average_loss < best_eval_loss and epoch >= 10:
             print(
                 f"最小验证损失值已更新: {best_eval_loss:.5f} --> {average_loss:.5f}"
             )
@@ -223,9 +236,6 @@ def model2train():
             tokenizer.save_pretrained(best_save_dir)
             print(f'最佳模型已保存至 {best_save_dir}...')
         tic_train = time.time()
-
-        gc.collect()
-        torch.cuda.empty_cache()
 
 
 if __name__ == '__main__':
