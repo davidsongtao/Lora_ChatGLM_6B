@@ -78,6 +78,7 @@ def model2train():
     # 加载分词器，加载模型配置
     tokenizer = AutoTokenizer.from_pretrained(pc.pre_model, trust_remote_code=True, revision="main")
     config = AutoConfig.from_pretrained(pc.pre_model, trust_remote_code=True, revision="main")
+    global_step, best_eval_loss, best_epoch = 0, float('inf'), 0
 
     # 如果使用p-tuning,则在模型中添加一个前缀编码器。
     if pc.use_ptuning:
@@ -158,7 +159,6 @@ def model2train():
     # 初始化损失列表，用于记录训练过程中损失值的变化
     loss_list = []
     tic_train = time.time()
-    global_step, best_eval_loss = 0, float('inf')
 
     # 开始训练轮次
     for epoch in range(1, pc.epochs + 1):
@@ -167,6 +167,8 @@ def model2train():
         total_correct = 0
         total_tokens = 0
         loss_list = []
+
+        # 开始训练
         for i, batch in enumerate(train_dataloader):
             input_ids = batch['input_ids'].to(dtype=torch.long, device=pc.device)
             labels = batch['labels'].to(dtype=torch.long, device=pc.device)
@@ -177,7 +179,9 @@ def model2train():
             else:
                 outputs = model(input_ids=input_ids, labels=labels)
 
-            loss = outputs.loss
+            # 保存原始损失用于记录 - 这是关键修改点
+            original_loss = outputs.loss
+            loss_list.append(float(original_loss.cpu().detach()))  # 在缩放前记录损失
 
             # 计算训练时的准确率
             shift_logits = outputs.logits[..., :-1, :].contiguous()
@@ -189,10 +193,13 @@ def model2train():
             total_correct += correct.sum().item()
             total_tokens += shift_mask.sum().item()
 
+            # 为反向传播准备可能缩放的损失
             if pc.grad_accumulation_steps > 1:
-                loss = loss / pc.grad_accumulation_steps
+                scaled_loss = original_loss / pc.grad_accumulation_steps
+            else:
+                scaled_loss = original_loss
 
-            loss.backward()
+            scaled_loss.backward()  # 使用可能缩放的损失进行反向传播
 
             torch.nn.utils.clip_grad_norm_(model.parameters(), pc.max_grad_norm)
 
@@ -200,8 +207,6 @@ def model2train():
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
-
-            loss_list.append(float(loss.cpu().detach()))
 
             global_step += 1
             if global_step % pc.logging_steps == 0:
@@ -231,11 +236,13 @@ def model2train():
                 f"最小验证损失值已更新: {best_eval_loss:.5f} --> {average_loss:.5f}"
             )
             best_eval_loss = average_loss
+            best_epoch = epoch
             best_save_dir = os.path.join(pc.save_dir, "model_best")
             save_model(model, best_save_dir)
             tokenizer.save_pretrained(best_save_dir)
             print(f'最佳模型已保存至 {best_save_dir}...')
         tic_train = time.time()
+    print(f"训练结束，最佳模型来自第{best_epoch}轮，验证损失为{best_eval_loss:.5f}")
 
 
 if __name__ == '__main__':

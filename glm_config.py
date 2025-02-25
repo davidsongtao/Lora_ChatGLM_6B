@@ -25,7 +25,7 @@ class ProjectConfig(object):
 
         self.max_source_seq_len = 300
         self.max_target_seq_len = 200
-        self.logging_steps = 10
+        self.logging_steps = 100
         self.save_freq = 1
         self.pre_seq_len = 128
         self.prefix_projection = False  # 默认为False,即p-tuning,如果为True，即p-tuning-v2
