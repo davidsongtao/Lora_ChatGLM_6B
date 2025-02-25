@@ -8,16 +8,16 @@ class ProjectConfig(object):
         # self.device = 'cpu'
         self.pre_model = '/root/autodl-fs/chatglm-6b'
         self.train_path = '/root/autodl-tmp/lora_chatglm/data/mixed_train_dataset.jsonl'
-        self.dev_path = '/root/autodl-tmp/lora_chatglm/data/mixed_train_dataset.jsonl'
+        self.dev_path = '/root/autodl-tmp/lora_chatglm/data/mixed_dev_dataset.jsonl'
         self.use_lora = True
         self.use_ptuning = False
 
         # 调参啦
-        self.lora_rank = 4
-        self.lora_alpha = 8
+        self.lora_rank = 16
+        self.lora_alpha = 16
         self.batch_size = 1
         self.epochs = 30
-        self.learning_rate = 3e-5
+        self.learning_rate = 0.01
         self.weight_decay = 0.01
         self.warmup_ratio = 0.06
 

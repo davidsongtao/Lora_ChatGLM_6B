@@ -20,6 +20,7 @@ def evaluate_model(model, dev_dataloader):
     """
     改进的模型评估函数，增加了困惑度(perplexity)计算
     """
+    print("该轮次训练结束。开始模型评估...")
     model.eval()
     loss_list = []
     total_correct = 0
