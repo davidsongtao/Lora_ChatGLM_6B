@@ -1,3 +1,4 @@
+import gc
 import os
 import time
 import copy
@@ -219,6 +220,9 @@ def model2train():
             tokenizer.save_pretrained(best_save_dir)
             print(f'最佳模型已保存至 {best_save_dir}...')
         tic_train = time.time()
+
+        gc.collect()
+        torch.cuda.empty_cache()
 
 
 if __name__ == '__main__':

@@ -2,7 +2,9 @@ import torch
 import torch.nn as nn
 from glm_config import *
 import copy
+
 pc = ProjectConfig()
+
 
 class CastOutputToFloat(nn.Sequential):
     def forward(self, x):
@@ -24,14 +26,13 @@ def second2time(seconds: int):
 def save_model(
         model,
         cur_save_dir: str
-    ):
+):
     """
     存储当前模型。
-
     Args:
         cur_save_path (str): 存储路径。
     """
-    if pc.use_lora:                       # merge lora params with origin model
+    if pc.use_lora:  # merge lora params with origin model
         merged_model = copy.deepcopy(model)
         # 如果直接保存，只保存的是adapter也就是lora模型的参数
         merged_model = merged_model.merge_and_unload()

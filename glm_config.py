@@ -11,13 +11,16 @@ class ProjectConfig(object):
         self.dev_path = '/root/autodl-tmp/lora_chatglm/data/mixed_train_dataset.jsonl'
         self.use_lora = True
         self.use_ptuning = False
-        self.lora_rank = 8
+
+        # 调参啦
+        self.lora_rank = 4
         self.lora_alpha = 8
         self.batch_size = 1
-        self.epochs = 50
+        self.epochs = 30
         self.learning_rate = 3e-5
-        self.weight_decay = 0
+        self.weight_decay = 0.01
         self.warmup_ratio = 0.06
+
         self.max_source_seq_len = 400
         self.max_target_seq_len = 300
         self.logging_steps = 100
