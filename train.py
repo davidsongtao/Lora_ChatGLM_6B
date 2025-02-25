@@ -18,19 +18,13 @@ pc = ProjectConfig()
 
 def evaluate_model(model, dev_dataloader):
     """
-    在测试集上评估当前模型的训练效果，计算损失值和准确率。
-
-    Args:
-        model: 当前模型
-        dev_dataloader: 测试集的dataloader
-
-    Returns:
-        tuple: (平均损失值, 准确率)
+    改进的模型评估函数，增加了困惑度(perplexity)计算
     """
     model.eval()
     loss_list = []
     total_correct = 0
     total_tokens = 0
+    all_losses = []  # 用于计算困惑度
 
     with torch.no_grad():
         for batch in dev_dataloader:
@@ -47,23 +41,31 @@ def evaluate_model(model, dev_dataloader):
             loss = outputs.loss
             loss_list.append(float(loss.cpu().detach()))
 
+            # 记录每个token位置的loss，用于计算困惑度
+            shift_logits = outputs.logits[..., :-1, :].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
+            loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
+            token_loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)),
+                                  shift_labels.view(-1))
+            mask = shift_labels.view(-1) != -100
+            all_losses.extend(token_loss[mask].cpu().tolist())
+
             # 计算准确率
             logits = outputs.logits
             predictions = torch.argmax(logits, dim=-1)
-
-            # 只计算labels不等于-100的位置（这些是需要预测的token位置）
             mask = labels != -100
             correct = (predictions == labels) & mask
 
             total_correct += correct.sum().item()
             total_tokens += mask.sum().item()
 
-    # 计算平均损失和准确率
+    # 计算平均损失、困惑度和准确率
     avg_loss = sum(loss_list) / len(loss_list)
+    perplexity = torch.exp(torch.tensor(sum(all_losses) / len(all_losses))).item()
     accuracy = total_correct / total_tokens if total_tokens > 0 else 0
 
     model.train()
-    return avg_loss, accuracy
+    return avg_loss, accuracy, perplexity
 
 
 def model2train():
@@ -207,14 +209,14 @@ def model2train():
                 tic_train = time.time()
 
         # 评估模型
-        eval_loss, eval_accuracy = evaluate_model(model, dev_dataloader)
+        average_loss, eval_accuracy, perplexity = evaluate_model(model, dev_dataloader)
 
-        print(f"第{epoch}论训练结束。验证集损失值: {eval_loss:.5f}, 准确率: {(eval_accuracy * 100):.2f}%")
-        if eval_loss < best_eval_loss:
+        print(f"第{epoch}论训练结束。平均损失值: {average_loss:.5f} | 准确率: {(eval_accuracy * 100):.2f}% | 困惑度： {perplexity:.2f} ")
+        if average_loss < best_eval_loss:
             print(
-                f"最小验证损失值已更新: {best_eval_loss:.5f} --> {eval_loss:.5f}"
+                f"最小验证损失值已更新: {best_eval_loss:.5f} --> {average_loss:.5f}"
             )
-            best_eval_loss = eval_loss
+            best_eval_loss = average_loss
             best_save_dir = os.path.join(pc.save_dir, "model_best")
             save_model(model, best_save_dir)
             tokenizer.save_pretrained(best_save_dir)
