@@ -17,30 +17,52 @@ pc = ProjectConfig()
 
 def evaluate_model(model, dev_dataloader):
     """
-    在测试集上评估当前模型的训练效果。
+    在测试集上评估当前模型的训练效果，计算损失值和准确率。
 
     Args:
         model: 当前模型
-        data_loader: 测试集的dataloader
+        dev_dataloader: 测试集的dataloader
+
+    Returns:
+        tuple: (平均损失值, 准确率)
     """
     model.eval()
     loss_list = []
+    total_correct = 0
+    total_tokens = 0
+
     with torch.no_grad():
         for batch in dev_dataloader:
+            input_ids = batch['input_ids'].to(dtype=torch.long, device=pc.device)
+            labels = batch['labels'].to(dtype=torch.long, device=pc.device)
+
+            # 获取模型输出
             if pc.use_lora:
                 with autocast():
-                    loss = model(
-                        input_ids=batch['input_ids'].to(dtype=torch.long, device=pc.device),
-                        labels=batch['labels'].to(dtype=torch.long, device=pc.device)
-                    ).loss
+                    outputs = model(input_ids=input_ids, labels=labels)
             else:
-                loss = model(
-                    input_ids=batch['input_ids'].to(dtype=torch.long, device=pc.device),
-                    labels=batch['labels'].to(dtype=torch.long, device=pc.device)
-                ).loss
+                outputs = model(input_ids=input_ids, labels=labels)
+
+            loss = outputs.loss
             loss_list.append(float(loss.cpu().detach()))
+
+            # 计算准确率
+            logits = outputs.logits
+            predictions = torch.argmax(logits, dim=-1)
+
+            # 只计算labels不等于-100的位置（这些是需要预测的token位置）
+            mask = labels != -100
+            correct = (predictions == labels) & mask
+
+            total_correct += correct.sum().item()
+            total_tokens += mask.sum().item()
+
+    # 计算平均损失和准确率
+    avg_loss = sum(loss_list) / len(loss_list)
+    accuracy = total_correct / total_tokens if total_tokens > 0 else 0
+
     model.train()
-    return sum(loss_list) / len(loss_list)
+    return avg_loss, accuracy
 
 
 def model2train():
@@ -134,7 +156,6 @@ def model2train():
         print("开始训练...")
         for batch in train_dataloader:
             if pc.use_lora:
-
                 # torch.cuda.amp.autocast是PyTorch中一种混合精度的技术（仅在GPU上训练时可使用）
                 with autocast():
                     loss = model(
@@ -142,7 +163,6 @@ def model2train():
                         labels=batch['labels'].to(dtype=torch.long, device=pc.device)
                     ).loss
             else:
-
                 loss = model(
                     input_ids=batch['input_ids'].to(dtype=torch.long, device=pc.device),
                     labels=batch['labels'].to(dtype=torch.long, device=pc.device)
@@ -171,9 +191,9 @@ def model2train():
                 tic_train = time.time()
 
         # 评估模型
-        eval_loss = evaluate_model(model, dev_dataloader)
+        eval_loss, eval_accuracy = evaluate_model(model, dev_dataloader)
 
-        print(f"第{epoch}论训练结束。验证集损失值：: %.5f" % eval_loss)
+        print(f"第{epoch}论训练结束。验证集损失值: {eval_loss:.5f}, 准确率: {eval_accuracy:.4f}")
         if eval_loss < best_eval_loss:
             print(
                 f"最小验证损失值已更新: {best_eval_loss:.5f} --> {eval_loss:.5f}"
