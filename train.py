@@ -154,20 +154,32 @@ def model2train():
     # 开始训练轮次
     for epoch in range(1, pc.epochs + 1):
         print("开始训练...")
+        # 为每个logging间隔重置统计数据
+        loss_list = []
+        total_correct = 0
+        total_tokens = 0
         for batch in train_dataloader:
-            if pc.use_lora:
-                # torch.cuda.amp.autocast是PyTorch中一种混合精度的技术（仅在GPU上训练时可使用）
-                with autocast():
-                    loss = model(
-                        input_ids=batch['input_ids'].to(dtype=torch.long, device=pc.device),
-                        labels=batch['labels'].to(dtype=torch.long, device=pc.device)
-                    ).loss
-            else:
-                loss = model(
-                    input_ids=batch['input_ids'].to(dtype=torch.long, device=pc.device),
-                    labels=batch['labels'].to(dtype=torch.long, device=pc.device)
-                ).loss
+            input_ids = batch['input_ids'].to(dtype=torch.long, device=pc.device)
+            labels = batch['labels'].to(dtype=torch.long, device=pc.device)
 
+            if pc.use_lora:
+                with autocast():
+                    outputs = model(input_ids=input_ids, labels=labels)
+            else:
+                outputs = model(input_ids=input_ids, labels=labels)
+
+            loss = outputs.loss
+
+            # 计算训练时的准确率
+            logits = outputs.logits
+            predictions = torch.argmax(logits, dim=-1)
+            mask = labels != -100
+            correct = (predictions == labels) & mask
+
+            total_correct += correct.sum().item()
+            total_tokens += mask.sum().item()
+
+            # 优化器清零，反向传播，梯度更新，更新学习率调度器
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -179,12 +191,15 @@ def model2train():
             if global_step % pc.logging_steps == 0:
                 time_diff = time.time() - tic_train
                 loss_avg = sum(loss_list) / len(loss_list)
-                print("第 %d ( %02.2f%% ) 步 | 轮次: %d | 损失值: %.5f | 速度: %.2f 步/秒 | 预计耗时: %s"
+                train_accuracy = total_correct / total_tokens if total_tokens > 0 else 0
+
+                print("第 %d 步( %02.2f%% ) | 第 %d 轮 | 损失值: %.5f | 准确率: %.2f | 速度: %.2f 步/秒 | 预计耗时: %s"
                       % (
                           global_step,
                           global_step / max_train_steps * 100,
                           epoch,
                           loss_avg,
+                          train_accuracy * 100,
                           pc.logging_steps / time_diff,
                           second2time(int(max_train_steps - global_step) / (pc.logging_steps / time_diff))
                       ))
@@ -193,7 +208,7 @@ def model2train():
         # 评估模型
         eval_loss, eval_accuracy = evaluate_model(model, dev_dataloader)
 
-        print(f"第{epoch}论训练结束。验证集损失值: {eval_loss:.5f}, 准确率: {eval_accuracy:.4f}")
+        print(f"第{epoch}论训练结束。验证集损失值: {eval_loss:.5f}, 准确率: {(eval_accuracy * 100):.2f}%")
         if eval_loss < best_eval_loss:
             print(
                 f"最小验证损失值已更新: {best_eval_loss:.5f} --> {eval_loss:.5f}"
@@ -204,26 +219,6 @@ def model2train():
             tokenizer.save_pretrained(best_save_dir)
             print(f'最佳模型已保存至 {best_save_dir}...')
         tic_train = time.time()
-
-        # if global_step % pc.save_freq == 1:
-        #     cur_save_dir = os.path.join(pc.save_dir, "model_%d" % global_step)
-        #     save_model(model, cur_save_dir)
-        #     tokenizer.save_pretrained(cur_save_dir)
-        #     print(f'模型已保存至{cur_save_dir}...')
-        #
-        #     eval_loss = evaluate_model(model, dev_dataloader)
-        #
-        #     print("验证集损失值：: %.5f" % (eval_loss))
-        #     if eval_loss < best_eval_loss:
-        #         print(
-        #             f"最小验证损失值已更新: {best_eval_loss:.5f} --> {eval_loss:.5f}"
-        #         )
-        #         best_eval_loss = eval_loss
-        #         cur_save_dir = os.path.join(pc.save_dir, "model_best")
-        #         save_model(model, cur_save_dir)
-        #         tokenizer.save_pretrained(cur_save_dir)
-        #         print(f'最佳模型已保存至 {cur_save_dir}...')
-        #     tic_train = time.time()
 
 
 if __name__ == '__main__':
