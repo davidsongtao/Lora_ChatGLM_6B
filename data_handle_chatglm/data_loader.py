@@ -1,7 +1,7 @@
 # coding:utf-8
 from torch.utils.data import DataLoader
 from transformers import default_data_collator, AutoTokenizer
-from data_handle.data_preprocess import *
+from data_handle_chatglm.data_preprocess import *
 from glm_config import *
 
 pc = ProjectConfig() # 实例化项目配置文件

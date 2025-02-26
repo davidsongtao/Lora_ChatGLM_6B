@@ -11,7 +11,7 @@ import torch.nn.utils
 from torch.cuda.amp import autocast as autocast
 from transformers import AutoTokenizer, AutoConfig, AutoModel, get_scheduler, AutoModelForCausalLM
 from utils.common_utils import *
-from data_handle.data_loader import *
+from data_handle_chatglm.data_loader import *
 from glm_config import *
 
 pc = ProjectConfig()
