@@ -18,7 +18,7 @@ class ProjectConfig(object):
         self.batch_size = 3
         self.epochs = 100
         self.learning_rate = 5e-6
-        self.weight_decay = 0.0005
+        self.weight_decay = 0.001
         self.warmup_ratio = 0.1
         self.grad_accumulation_steps = 4  # 梯度累积
         self.max_grad_norm = 0.5  # 梯度裁剪

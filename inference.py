@@ -40,18 +40,19 @@ def inference(
 if __name__ == '__main__':
     from rich import print
 
+    trained_model = "/root/autodl-fs/trained_models/chatglm_6b/sop_chatglm_6b"
     max_new_tokens = 300
     pc = ProjectConfig()
 
     try:
         tokenizer = AutoTokenizer.from_pretrained(
-            pc.pre_model,
+            trained_model,
             trust_remote_code=True,
             revision="main"
         )
 
         model = AutoModel.from_pretrained(
-            pc.pre_model,
+            trained_model,
             trust_remote_code=True,
             revision="main"
 
